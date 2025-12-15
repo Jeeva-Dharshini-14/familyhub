@@ -1,0 +1,15 @@
+The following MongoDB model files should be deleted as they are no longer needed:
+
+- User.js
+- Family.js  
+- Member.js
+- Wallet.js
+- Category.js
+- Expense.js
+- Income.js
+- Task.js
+- Memory.js
+- HealthRecord.js
+- Document.js
+
+These have been replaced with Firebase Realtime Database operations in the controllers.
