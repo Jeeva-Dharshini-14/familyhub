@@ -10,6 +10,8 @@ import { apiService } from "@/lib/apiService";
 import { authUtils } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { DollarSign, TrendingDown, TrendingUp, Wallet, ArrowUpCircle, ArrowDownCircle, Download } from "lucide-react";
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Finance = () => {
@@ -445,67 +447,174 @@ const Finance = () => {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => {
-                const printWindow = window.open('', '', 'width=800,height=600');
-                printWindow?.document.write(`
-                  <html>
-                    <head>
-                      <title>Transaction Report</title>
-                      <style>
-                        body { font-family: Arial, sans-serif; padding: 40px; }
-                        h1 { color: #333; border-bottom: 2px solid #3b9ff3; padding-bottom: 10px; }
-                        h2 { color: #555; margin-top: 30px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-                        th { background-color: #f5f5f5; font-weight: bold; }
-                        .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
-                        .summary-item { padding: 15px; background: #f9f9f9; border-radius: 8px; }
-                        .income { color: #10b981; }
-                        .expense { color: #ef4444; }
-                      </style>
-                    </head>
-                    <body>
-                      <h1>FamilyHub - Transaction Report</h1>
-                      <p>Generated: ${new Date().toLocaleString()}</p>
-                      
-                      <h2>Summary</h2>
-                      <div class="summary">
-                        <div class="summary-item"><strong>Total Balance:</strong> $${totalBalance.toFixed(2)}</div>
-                        <div class="summary-item"><strong>Net:</strong> $${(totalIncome - totalExpenses).toFixed(2)}</div>
-                        <div class="summary-item income"><strong>Total Income:</strong> +$${totalIncome.toFixed(2)}</div>
-                        <div class="summary-item expense"><strong>Total Expenses:</strong> -$${totalExpenses.toFixed(2)}</div>
-                      </div>
-                      
-                      <h2>Wallets</h2>
-                      <table>
-                        <tr><th>Wallet Name</th><th>Balance</th></tr>
-                        ${wallets.map(w => `<tr><td>${w.name}</td><td>$${w.balance.toFixed(2)}</td></tr>`).join('')}
-                      </table>
-                      
-                      <h2>All Transactions</h2>
-                      <table>
-                        <tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr>
-                        ${allTransactions.map(t => {
-                          const cat = categories.find(c => c.id === t.categoryId);
-                          return `<tr>
-                            <td>${new Date(t.date).toLocaleDateString()}</td>
-                            <td>${t.type}</td>
-                            <td>${cat?.name || 'N/A'}</td>
-                            <td>${t.description}</td>
-                            <td class="${t.type}">${t.type === 'income' ? '+' : '-'}$${t.amount.toFixed(2)}</td>
-                          </tr>`;
-                        }).join('')}
-                      </table>
-                    </body>
-                  </html>
-                `);
-                printWindow?.document.close();
-                printWindow?.focus();
-                setTimeout(() => {
-                  printWindow?.print();
-                  printWindow?.close();
-                }, 250);
-                toast({ title: "Opening print dialog" });
+              onClick={async () => {
+                try {
+                  const doc = new jsPDF();
+                  
+                  // Header with gradient effect
+                  doc.setFillColor(59, 130, 246);
+                  doc.rect(0, 0, 210, 40, 'F');
+                  doc.setFillColor(37, 99, 235);
+                  doc.rect(0, 30, 210, 10, 'F');
+                  
+                  doc.setFontSize(24);
+                  doc.setTextColor(255, 255, 255);
+                  doc.text('FAMILYHUB', 20, 20);
+                  doc.setFontSize(12);
+                  doc.text('Financial Report', 20, 30);
+                  doc.setFontSize(8);
+                  doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 140, 35);
+                  
+                  // Summary Cards
+                  let y = 55;
+                  
+                  // Balance Card
+                  doc.setFillColor(240, 253, 244);
+                  doc.rect(15, y, 180, 25, 'F');
+                  doc.setDrawColor(34, 197, 94);
+                  doc.setLineWidth(0.5);
+                  doc.rect(15, y, 180, 25, 'S');
+                  doc.setFontSize(14);
+                  doc.setTextColor(22, 163, 74);
+                  doc.text('TOTAL BALANCE', 20, y + 8);
+                  doc.setFontSize(20);
+                  doc.setTextColor(21, 128, 61);
+                  doc.text(`$${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 20, y + 18);
+                  
+                  y += 35;
+                  
+                  // Income/Expense Cards Side by Side
+                  doc.setFillColor(239, 246, 255);
+                  doc.rect(15, y, 85, 20, 'F');
+                  doc.setDrawColor(59, 130, 246);
+                  doc.rect(15, y, 85, 20, 'S');
+                  doc.setFontSize(10);
+                  doc.setTextColor(37, 99, 235);
+                  doc.text('INCOME', 20, y + 7);
+                  doc.setFontSize(14);
+                  doc.text(`+$${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 20, y + 15);
+                  
+                  doc.setFillColor(254, 242, 242);
+                  doc.rect(110, y, 85, 20, 'F');
+                  doc.setDrawColor(239, 68, 68);
+                  doc.rect(110, y, 85, 20, 'S');
+                  doc.setTextColor(220, 38, 38);
+                  doc.text('EXPENSES', 115, y + 7);
+                  doc.text(`-$${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 115, y + 15);
+                  
+                  y += 35;
+                  
+                  // Wallets Section
+                  doc.setFillColor(249, 250, 251);
+                  doc.rect(15, y, 180, 15 + (wallets.length * 8), 'F');
+                  doc.setDrawColor(156, 163, 175);
+                  doc.rect(15, y, 180, 15 + (wallets.length * 8), 'S');
+                  
+                  doc.setFontSize(12);
+                  doc.setTextColor(75, 85, 99);
+                  doc.text('WALLETS', 20, y + 10);
+                  
+                  doc.setFontSize(9);
+                  doc.setTextColor(0, 0, 0);
+                  let walletY = y + 18;
+                  wallets.forEach((wallet, index) => {
+                    doc.text(`${index + 1}. ${wallet.name}`, 25, walletY);
+                    doc.setTextColor(22, 163, 74);
+                    doc.text(`$${wallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 140, walletY);
+                    doc.setTextColor(0, 0, 0);
+                    walletY += 8;
+                  });
+                  
+                  y = walletY + 15;
+                  
+                  // Transactions Table
+                  doc.setFillColor(31, 41, 55);
+                  doc.rect(15, y, 180, 15, 'F');
+                  doc.setFontSize(12);
+                  doc.setTextColor(255, 255, 255);
+                  doc.text('RECENT TRANSACTIONS', 20, y + 10);
+                  
+                  y += 20;
+                  
+                  // Table Headers
+                  doc.setFillColor(243, 244, 246);
+                  doc.rect(15, y, 180, 10, 'F');
+                  doc.setDrawColor(209, 213, 219);
+                  doc.rect(15, y, 180, 10, 'S');
+                  
+                  doc.setFontSize(8);
+                  doc.setTextColor(75, 85, 99);
+                  doc.text('DATE', 20, y + 6);
+                  doc.text('TYPE', 50, y + 6);
+                  doc.text('CATEGORY', 75, y + 6);
+                  doc.text('DESCRIPTION', 115, y + 6);
+                  doc.text('AMOUNT', 165, y + 6);
+                  
+                  y += 15;
+                  
+                  // Transaction Rows
+                  allTransactions.slice(0, 20).forEach((t, index) => {
+                    const cat = categories.find(c => c.id === t.categoryId);
+                    
+                    if (index % 2 === 0) {
+                      doc.setFillColor(249, 250, 251);
+                      doc.rect(15, y - 2, 180, 8, 'F');
+                    }
+                    
+                    doc.setFontSize(7);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), 20, y + 2);
+                    
+                    if (t.type === 'income') {
+                      doc.setTextColor(22, 163, 74);
+                      doc.text('IN', 50, y + 2);
+                    } else {
+                      doc.setTextColor(220, 38, 38);
+                      doc.text('OUT', 50, y + 2);
+                    }
+                    
+                    doc.setTextColor(75, 85, 99);
+                    doc.text((cat?.name || 'Other').substring(0, 12), 75, y + 2);
+                    doc.text(t.description.substring(0, 20), 115, y + 2);
+                    
+                    if (t.type === 'income') {
+                      doc.setTextColor(22, 163, 74);
+                      doc.text(`+$${t.amount.toFixed(2)}`, 165, y + 2);
+                    } else {
+                      doc.setTextColor(220, 38, 38);
+                      doc.text(`-$${t.amount.toFixed(2)}`, 165, y + 2);
+                    }
+                    
+                    y += 8;
+                    if (y > 270) {
+                      doc.addPage();
+                      y = 30;
+                    }
+                  });
+                  
+                  // Footer
+                  doc.setFillColor(59, 130, 246);
+                  doc.rect(0, 287, 210, 10, 'F');
+                  doc.setFontSize(7);
+                  doc.setTextColor(255, 255, 255);
+                  doc.text('FamilyHub - Your Family\'s Smart Financial OS', 20, 293);
+                  doc.text(`Page 1 of ${doc.getNumberOfPages()}`, 170, 293);
+                  
+                  const pdfBlob = doc.output('blob');
+                  const url = URL.createObjectURL(pdfBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `FamilyHub_Financial_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                  
+                  toast({ title: "Professional PDF downloaded!" });
+                } catch (error) {
+                  console.error('PDF error:', error);
+                  toast({ title: "Download failed", variant: "destructive" });
+                }
               }}
             >
               <Download className="h-4 w-4 mr-2" />

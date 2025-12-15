@@ -170,9 +170,9 @@ const Memories = () => {
                 <FileUpload
                   accept="image/*"
                   onFileSelect={handleFileSelect}
-                  maxSize={0.5}
+                  maxSize={5}
                 />
-                <p className="text-xs text-muted-foreground">Max size: 500KB for best performance</p>
+                <p className="text-xs text-muted-foreground">Max size: 5MB for high quality photos</p>
               </div>
             </div>
             <DialogFooter>
