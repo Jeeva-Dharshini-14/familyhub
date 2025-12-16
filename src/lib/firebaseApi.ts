@@ -521,18 +521,18 @@ export const firebaseApi = {
   },
 
   async clearAllNotifications(userId: string) {
-    const notifications = await this.getNotifications(userId);
-    const updates = {};
-    notifications.forEach((n: any) => {
-      updates[`/notifications/${n.id}`] = null;
-    });
+    const notifications = await firebaseRequest('/notifications');
+    if (!notifications) return { success: true };
     
-    if (Object.keys(updates).length > 0) {
-      await firebaseRequest('', {
-        method: 'PATCH',
-        body: JSON.stringify(updates),
+    const userNotifications = Object.keys(notifications)
+      .filter(id => notifications[id].userId === userId);
+    
+    for (const notificationId of userNotifications) {
+      await firebaseRequest(`/notifications/${notificationId}`, {
+        method: 'DELETE'
       });
     }
+    
     return { success: true };
   },
 
