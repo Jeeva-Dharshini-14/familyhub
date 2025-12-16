@@ -14,13 +14,27 @@ const firebaseRequest = async (path: string, options: RequestInit = {}) => {
     },
   };
 
-  const response = await fetch(url, config);
+  // Add timeout for production
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
   
-  if (!response.ok) {
-    throw new Error(`Firebase error: ${response.status}`);
-  }
+  try {
+    const response = await fetch(url, { ...config, signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Firebase error: ${response.status}`);
+    }
 
-  return response.json();
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout - please try again');
+    }
+    throw error;
+  }
 };
 
 export const firebaseApi = {
@@ -176,6 +190,7 @@ export const firebaseApi = {
     const newWallet = {
       id: walletId,
       ...walletData,
+      initialBalance: walletData.balance || 0,
       createdAt: new Date().toISOString(),
     };
 
@@ -285,18 +300,7 @@ export const firebaseApi = {
       body: JSON.stringify(newExpense),
     });
 
-    // Update wallet balance
-    if (expenseData.walletId) {
-      const wallet = await firebaseRequest(`/wallets/${expenseData.walletId}`);
-      if (wallet) {
-        const updatedBalance = (wallet.balance || 0) - expenseData.amount;
-        await firebaseRequest(`/wallets/${expenseData.walletId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ balance: updatedBalance }),
-        });
-      }
-    }
-
+    // Don't update wallet balance - calculate from transactions
     return newExpense;
   },
 
@@ -572,41 +576,13 @@ export const firebaseApi = {
   },
 
   async deleteExpense(expenseId: string) {
-    // Get expense data before deleting to update wallet balance
-    const expense = await firebaseRequest(`/expenses/${expenseId}`);
-    
     await firebaseRequest(`/expenses/${expenseId}`, { method: 'DELETE' });
-    
-    // Update wallet balance by adding back the deleted expense
-    if (expense && expense.walletId) {
-      const wallet = await firebaseRequest(`/wallets/${expense.walletId}`);
-      if (wallet) {
-        const updatedBalance = (wallet.balance || 0) + expense.amount;
-        await firebaseRequest(`/wallets/${expense.walletId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ balance: updatedBalance }),
-        });
-      }
-    }
+    // Don't update wallet balance - calculate from transactions
   },
 
   async deleteIncome(incomeId: string) {
-    // Get income data before deleting to update wallet balance
-    const income = await firebaseRequest(`/incomes/${incomeId}`);
-    
     await firebaseRequest(`/incomes/${incomeId}`, { method: 'DELETE' });
-    
-    // Update wallet balance by subtracting the deleted income
-    if (income && income.walletId) {
-      const wallet = await firebaseRequest(`/wallets/${income.walletId}`);
-      if (wallet) {
-        const updatedBalance = (wallet.balance || 0) - income.amount;
-        await firebaseRequest(`/wallets/${income.walletId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ balance: updatedBalance }),
-        });
-      }
-    }
+    // Don't update wallet balance - calculate from transactions
   },
 
   async deleteMember(memberId: string) {
@@ -662,18 +638,7 @@ export const firebaseApi = {
       body: JSON.stringify(newIncome),
     });
 
-    // Update wallet balance
-    if (incomeData.walletId) {
-      const wallet = await firebaseRequest(`/wallets/${incomeData.walletId}`);
-      if (wallet) {
-        const updatedBalance = (wallet.balance || 0) + incomeData.amount;
-        await firebaseRequest(`/wallets/${incomeData.walletId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ balance: updatedBalance }),
-        });
-      }
-    }
-
+    // Don't update wallet balance - calculate from transactions
     return newIncome;
   },
 

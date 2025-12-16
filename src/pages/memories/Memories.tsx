@@ -11,11 +11,11 @@ import { FileUpload } from "@/components/FileUpload";
 import { apiService } from "@/lib/apiService";
 import { authUtils } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const Memories = () => {
   const user = authUtils.getAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
   const [formData, setFormData] = useState({
@@ -26,47 +26,44 @@ const Memories = () => {
   });
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      if (!user?.familyId) return;
-      const memoriesData = await apiService.getMemories(user.familyId);
-      setMemories(memoriesData);
-    } catch (error) {
-      console.error("Failed to load memories:", error);
-    } finally {
-      setLoading(false);
+    if (!user?.familyId) {
+      setMemories([]);
+      return;
     }
-  };
+
+    // Load data in background without blocking UI
+    apiService.getMemories(user.familyId)
+      .then(memoriesData => setMemories(memoriesData || []))
+      .catch(() => setMemories([]));
+  }, [user?.familyId]);
 
   const handleFileSelect = (file: File, preview: string) => {
-    // Store the preview for display
-    setFormData({ ...formData, photoUrl: preview });
+    setFormData(prev => ({ ...prev, photoUrl: preview }));
   };
 
   const handleAdd = async () => {
-    try {
-      if (!formData.title) {
-        toast({
-          title: "Missing fields",
-          description: "Please add a title",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (!formData.title) {
+      toast({
+        title: "Missing fields",
+        description: "Please add a title",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      const memoryData = {
+    try {
+      setSaving(true);
+      
+      const savedMemory = await apiService.addMemory({
         familyId: user?.familyId,
         title: formData.title,
         description: formData.description,
         date: formData.date,
         photoUrl: formData.photoUrl || "",
         createdBy: user?.memberId,
-      };
+      });
       
-      await apiService.addMemory(memoryData);
+      setMemories(prev => [savedMemory, ...prev]);
 
       toast({
         title: "Memory added",
@@ -80,24 +77,26 @@ const Memories = () => {
         date: new Date().toISOString().split('T')[0],
         photoUrl: "",
       });
-      loadData();
     } catch (error: any) {
       toast({
         title: "Failed to add memory",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (memoryId: string) => {
     try {
       await apiService.deleteMemory(memoryId);
+      setMemories(prev => prev.filter(m => m.id !== memoryId));
+      
       toast({
         title: "Memory deleted",
         description: "Memory has been removed",
       });
-      loadData();
     } catch (error: any) {
       toast({
         title: "Failed to delete",
@@ -107,18 +106,7 @@ const Memories = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-64" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // Always show UI immediately
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -145,7 +133,7 @@ const Memories = () => {
                 <Input
                   placeholder="Summer vacation, Birthday party..."
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -153,7 +141,7 @@ const Memories = () => {
                 <Input
                   type="date"
                   value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -161,7 +149,7 @@ const Memories = () => {
                 <Textarea
                   placeholder="Tell the story behind this memory..."
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   rows={4}
                 />
               </div>
@@ -179,7 +167,9 @@ const Memories = () => {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAdd}>Save Memory</Button>
+              <Button onClick={handleAdd} disabled={saving}>
+                {saving ? "Saving..." : "Save Memory"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

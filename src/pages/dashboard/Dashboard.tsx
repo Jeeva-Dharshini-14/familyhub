@@ -55,14 +55,25 @@ const Dashboard = () => {
         return;
       }
 
-      const [wallets, tasks, healthRecords, expenses] = await Promise.all([
+      const [wallets, tasks, healthRecords, expenses, incomes] = await Promise.all([
         apiService.getWallets(user.familyId),
         apiService.getTasks(user.familyId),
         apiService.getHealthRecords(user.familyId),
         apiService.getExpenses(user.familyId),
+        apiService.getIncomes(user.familyId),
       ]);
 
-      const totalBalance = wallets.reduce((sum: number, w: any) => sum + w.balance, 0);
+      // Calculate wallet balances from transactions
+      
+      const calculatedWallets = wallets.map(wallet => {
+        const walletExpenses = expenses.filter(e => e.walletId === wallet.id);
+        const walletIncomes = incomes.filter(i => i.walletId === wallet.id);
+        const totalExpenses = walletExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const totalIncomes = walletIncomes.reduce((sum, i) => sum + i.amount, 0);
+        return (wallet.initialBalance || 0) + totalIncomes - totalExpenses;
+      });
+      
+      const totalBalance = calculatedWallets.reduce((sum: number, balance: number) => sum + balance, 0);
       const pendingTasksCount = tasks.filter((t: any) => t.status === "pending").length;
       
       // Calculate expense trend (mock calculation)

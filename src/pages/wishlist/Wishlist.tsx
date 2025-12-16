@@ -16,6 +16,7 @@ const Wishlist = () => {
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [items, setItems] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     memberId: "",
     name: "",
@@ -24,77 +25,57 @@ const Wishlist = () => {
     priority: "medium",
   });
 
-  const [members, setMembers] = useState<any[]>([]);
-
   useEffect(() => {
     loadData();
     loadMembers();
   }, []);
 
-  const loadMembers = async () => {
+  const loadData = async () => {
     try {
       if (!user?.familyId) return;
-      const familyMembers = await apiService.getMembers(user.familyId);
-      setMembers(familyMembers);
-      
-      // Set default member to first member if not set
-      if (!formData.memberId && familyMembers.length > 0) {
-        setFormData(prev => ({ ...prev, memberId: familyMembers[0].id }));
-      }
+      const wishlistItems = await apiService.getWishlistItems(user.familyId);
+      setItems(wishlistItems || []);
     } catch (error) {
-      console.error("Failed to load members:", error);
-      setMembers([]);
-    }
-  };
-
-  const loadData = () => {
-    try {
-      // Load from localStorage
-      const savedItems = localStorage.getItem(`wishlist_${user?.familyId || 'demo'}`);
-      if (savedItems) {
-        setItems(JSON.parse(savedItems));
-      }
-    } catch (error) {
-      console.error("Failed to load wishlist:", error);
       setItems([]);
     }
   };
 
-  const saveData = (newItems: any[]) => {
+  const loadMembers = async () => {
     try {
-      localStorage.setItem(`wishlist_${user?.familyId || 'demo'}`, JSON.stringify(newItems));
+      if (!user?.familyId) return;
+      const familyMembers = await apiService.getMembers(user.familyId);
+      setMembers(familyMembers || []);
+      if (familyMembers && familyMembers.length > 0) {
+        setFormData(prev => ({ ...prev, memberId: familyMembers[0].id }));
+      }
     } catch (error) {
-      console.error("Failed to save wishlist:", error);
+      setMembers([]);
     }
   };
 
-  const handleAdd = () => {
-    try {
-      if (!formData.memberId || !formData.name) {
-        toast({
-          title: "Missing fields",
-          description: "Please fill in member and item name",
-          variant: "destructive",
-        });
-        return;
-      }
+  const handleAdd = async () => {
+    if (!formData.memberId || !formData.name) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in member and item name",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      const newItem = {
-        id: Date.now().toString(),
-        familyId: user?.familyId || 'demo',
+    try {
+      setLoading(true);
+      
+      const itemData = {
+        familyId: user?.familyId,
         memberId: formData.memberId,
         name: formData.name,
-        url: formData.url || undefined,
-        price: formData.price ? parseFloat(formData.price) : undefined,
-        currency: "USD",
+        url: formData.url || "",
+        price: formData.price ? parseFloat(formData.price) : 0,
         priority: formData.priority,
-        purchased: false,
-        createdAt: new Date().toISOString(),
       };
       
-      const newItems = [...items, newItem];
-      setItems(newItems);
-      saveData(newItems);
+      await apiService.addWishlistItem(itemData);
 
       toast({
         title: "Item added",
@@ -109,52 +90,31 @@ const Wishlist = () => {
         price: "",
         priority: "medium",
       });
+      
+      await loadData();
     } catch (error: any) {
       toast({
         title: "Failed to add item",
-        description: error.message,
+        description: "Please try again",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDelete = (itemId: string) => {
+  const handleDelete = async (itemId: string) => {
     try {
-      const newItems = items.filter(item => item.id !== itemId);
-      setItems(newItems);
-      saveData(newItems);
-      
+      await apiService.deleteWishlistItem(itemId);
       toast({
         title: "Item deleted",
         description: "Wishlist item has been removed",
       });
+      await loadData();
     } catch (error: any) {
       toast({
         title: "Failed to delete item",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleTogglePurchased = (itemId: string) => {
-    try {
-      const newItems = items.map(item => 
-        item.id === itemId 
-          ? { ...item, purchased: !item.purchased, purchasedAt: !item.purchased ? new Date().toISOString() : undefined }
-          : item
-      );
-      setItems(newItems);
-      saveData(newItems);
-      
-      const item = items.find(i => i.id === itemId);
-      toast({
-        title: item?.purchased ? "Marked as unpurchased" : "Marked as purchased",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Failed to update item",
-        description: error.message,
+        description: "Please try again",
         variant: "destructive",
       });
     }
@@ -162,10 +122,10 @@ const Wishlist = () => {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      case "medium": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-      case "low": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      default: return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
+      case "high": return "bg-red-100 text-red-800";
+      case "medium": return "bg-yellow-100 text-yellow-800";
+      case "low": return "bg-green-100 text-green-800";
+      default: return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -176,12 +136,7 @@ const Wishlist = () => {
           <h1 className="text-3xl font-bold">Wishlist</h1>
           <p className="text-muted-foreground">Track family wishes and gift ideas</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (open && !formData.memberId && members.length > 0) {
-            setFormData(prev => ({ ...prev, memberId: members[0].id }));
-          }
-        }}>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -195,7 +150,7 @@ const Wishlist = () => {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Family Member</Label>
-                <Select value={formData.memberId} onValueChange={(val) => setFormData({ ...formData, memberId: val })}>
+                <Select value={formData.memberId} onValueChange={(val) => setFormData(prev => ({ ...prev, memberId: val }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select member" />
                   </SelectTrigger>
@@ -213,7 +168,7 @@ const Wishlist = () => {
                 <Input
                   placeholder="What do they want?"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -222,7 +177,7 @@ const Wishlist = () => {
                   type="url"
                   placeholder="https://..."
                   value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -231,12 +186,12 @@ const Wishlist = () => {
                   type="number"
                   placeholder="0.00"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Priority</Label>
-                <Select value={formData.priority} onValueChange={(val) => setFormData({ ...formData, priority: val })}>
+                <Select value={formData.priority} onValueChange={(val) => setFormData(prev => ({ ...prev, priority: val }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -252,7 +207,9 @@ const Wishlist = () => {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAdd}>Add Item</Button>
+              <Button onClick={handleAdd} disabled={loading}>
+                {loading ? "Adding..." : "Add Item"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -277,18 +234,12 @@ const Wishlist = () => {
           {items.map((item) => {
             const member = members.find(m => m.id === item.memberId);
             return (
-              <Card key={item.id} className={item.purchased ? "opacity-60" : ""}>
+              <Card key={item.id}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-semibold">{item.name}</h3>
-                        {item.purchased && (
-                          <Badge variant="secondary" className="flex items-center gap-1">
-                            <Check className="h-3 w-3" />
-                            Purchased
-                          </Badge>
-                        )}
                         <Badge className={getPriorityColor(item.priority)}>
                           {item.priority}
                         </Badge>
@@ -313,13 +264,6 @@ const Wishlist = () => {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant={item.purchased ? "outline" : "default"}
-                        onClick={() => handleTogglePurchased(item.id)}
-                      >
-                        {item.purchased ? "Unpurchase" : "Mark Purchased"}
-                      </Button>
                       <Button
                         size="sm"
                         variant="ghost"

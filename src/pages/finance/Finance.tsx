@@ -41,6 +41,7 @@ const Finance = () => {
 
   const loadFinanceData = async () => {
     try {
+      setLoading(true);
       if (!user?.familyId) return;
 
       const [walletsData, categoriesData, expensesData, incomesData] = await Promise.all([
@@ -50,13 +51,27 @@ const Finance = () => {
         apiService.getIncomes(user.familyId),
       ]);
 
-      setWallets(walletsData);
+      // Calculate wallet balances from transactions
+      const calculatedWallets = walletsData.map(wallet => {
+        const walletExpenses = expensesData.filter(e => e.walletId === wallet.id);
+        const walletIncomes = incomesData.filter(i => i.walletId === wallet.id);
+        const totalExpenses = walletExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const totalIncomes = walletIncomes.reduce((sum, i) => sum + i.amount, 0);
+        const calculatedBalance = (wallet.initialBalance || 0) + totalIncomes - totalExpenses;
+        
+        return {
+          ...wallet,
+          balance: calculatedBalance
+        };
+      });
+
+      setWallets(calculatedWallets);
       setCategories(categoriesData);
       setExpenses(expensesData);
       setIncomes(incomesData);
       
-      if (walletsData.length > 0) {
-        setFormData(prev => ({ ...prev, walletId: walletsData[0].id }));
+      if (calculatedWallets.length > 0) {
+        setFormData(prev => ({ ...prev, walletId: calculatedWallets[0].id }));
       }
       if (categoriesData.length > 0) {
         setFormData(prev => ({ ...prev, categoryId: categoriesData[0].id }));
@@ -111,6 +126,7 @@ const Finance = () => {
         createdBy: user?.memberId,
       };
 
+      // Await Firebase operations and only update UI after success
       if (dialogType === "expense") {
         await apiService.addExpense(data);
         toast({ title: "Expense added" });
@@ -127,6 +143,8 @@ const Finance = () => {
         description: "",
         date: new Date().toISOString().split("T")[0],
       });
+      
+      // Re-fetch all data from Firebase after transaction
       await loadFinanceData();
     } catch (error: any) {
       toast({ title: "Failed to add transaction", description: error.message, variant: "destructive" });
@@ -366,7 +384,7 @@ const Finance = () => {
               <div key={wallet.id} className="flex items-center justify-between p-3 rounded-lg border">
                 <div>
                   <p className="font-semibold">{wallet.name}</p>
-                  <p className="text-sm text-muted-foreground">${wallet.balance.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground">₹{wallet.balance.toFixed(2)}</p>
                 </div>
                 <Button
                   size="icon"
@@ -398,7 +416,7 @@ const Finance = () => {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-4xl font-bold text-primary mb-2">${totalBalance.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-primary mb-2">₹{totalBalance.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Across all wallets</p>
           </CardContent>
         </Card>
@@ -412,7 +430,7 @@ const Finance = () => {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-4xl font-bold text-success mb-2">${totalIncome.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-success mb-2">₹{totalIncome.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
         </Card>
@@ -426,7 +444,7 @@ const Finance = () => {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-4xl font-bold text-destructive mb-2">${totalExpenses.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-destructive mb-2">₹{totalExpenses.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
         </Card>
@@ -657,7 +675,7 @@ const Finance = () => {
                       </div>
                       <div className="flex items-center gap-3">
                         <p className={`text-xl font-bold ${isIncome ? 'text-success' : 'text-destructive'}`}>
-                          {isIncome ? '+' : '-'}${t.amount.toFixed(2)}
+                          {isIncome ? '+' : '-'}₹{t.amount.toFixed(2)}
                         </p>
                         <Button
                           size="icon"
@@ -703,7 +721,7 @@ const Finance = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="text-xl font-bold text-success">+${income.amount.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-success">+₹{income.amount.toFixed(2)}</p>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -744,7 +762,7 @@ const Finance = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="text-xl font-bold text-destructive">-${expense.amount.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-destructive">-₹{expense.amount.toFixed(2)}</p>
                         <Button
                           size="icon"
                           variant="ghost"

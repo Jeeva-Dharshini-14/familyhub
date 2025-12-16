@@ -18,6 +18,8 @@ const Documents = () => {
   const [documents, setDocuments] = useState<any[]>([]);
   const [filteredDocs, setFilteredDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -81,6 +83,7 @@ const Documents = () => {
 
   const handleUpload = async () => {
     try {
+      setUploading(true);
       if (!uploadFile) {
         toast({
           title: "No file selected",
@@ -92,11 +95,12 @@ const Documents = () => {
 
       const tags = docTags.split(",").map((t) => t.trim()).filter((t) => t);
 
+      // Await Firebase operation
       await apiService.uploadDocument({
         familyId: user?.familyId,
         name: uploadFile.file.name,
         type: uploadFile.file.type,
-        fileUrl: uploadFile.preview, // In real app, this would be uploaded to storage
+        fileUrl: uploadFile.preview,
         tags,
         uploadedBy: user?.memberId,
         isEncrypted: false,
@@ -110,33 +114,46 @@ const Documents = () => {
       setUploadDialogOpen(false);
       setUploadFile(null);
       setDocTags("");
-      loadDocuments();
+      
+      // Re-fetch data from Firebase
+      await loadDocuments();
     } catch (error: any) {
       toast({
         title: "Upload failed",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setUploading(false);
     }
   };
 
   const handleDelete = async () => {
     try {
+      setDeleting(true);
       if (!selectedDoc) return;
+      
+      // Await Firebase operation
       await apiService.deleteDocument(selectedDoc.id);
+      
       toast({
         title: "Document deleted",
         description: `${selectedDoc.name} has been deleted`,
       });
+      
       setDeleteDialogOpen(false);
       setSelectedDoc(null);
-      loadDocuments();
+      
+      // Re-fetch data from Firebase
+      await loadDocuments();
     } catch (error: any) {
       toast({
         title: "Failed to delete document",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -337,9 +354,9 @@ const Documents = () => {
             <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleUpload} disabled={!uploadFile}>
+            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
               <Upload className="mr-2 h-4 w-4" />
-              Upload
+              {uploading ? "Uploading..." : "Upload"}
             </Button>
           </div>
         </DialogContent>
@@ -395,9 +412,10 @@ const Documents = () => {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
