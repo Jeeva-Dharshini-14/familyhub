@@ -80,9 +80,13 @@ const Header = () => {
     if (!user?.id) return;
     try {
       await apiService.clearAllNotifications(user.id);
-      loadNotifications();
+      // Update UI immediately
+      setNotifications([]);
+      setUnreadCount(0);
     } catch (error) {
       console.error("Failed to clear notifications:", error);
+      // Reload on error
+      loadNotifications();
     }
   };
 
