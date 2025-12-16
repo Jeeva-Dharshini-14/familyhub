@@ -28,12 +28,32 @@ const Header = () => {
 
   useEffect(() => {
     loadNotifications();
+    
+    // Listen for notification updates
+    const handleNotificationUpdate = () => {
+      loadNotifications();
+    };
+    
+    window.addEventListener('notificationsUpdated', handleNotificationUpdate);
+    
+    // Refresh notifications every 2 minutes
+    const interval = setInterval(loadNotifications, 2 * 60 * 1000);
+    
+    return () => {
+      window.removeEventListener('notificationsUpdated', handleNotificationUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   const loadNotifications = async () => {
-    if (!user?.memberId) return;
+    if (!user?.id) return;
     try {
-      const data = await apiService.getNotifications(user.memberId);
+      // Generate event notifications first
+      if (user.familyId) {
+        await apiService.generateEventNotifications(user.familyId);
+      }
+      
+      const data = await apiService.getNotifications(user.id);
       setNotifications(data);
       setUnreadCount(data.filter((n: any) => !n.read).length);
     } catch (error) {
@@ -44,16 +64,22 @@ const Header = () => {
   const handleMarkAsRead = async (notificationId: string) => {
     try {
       await apiService.markNotificationRead(notificationId);
-      loadNotifications();
+      // Update local state immediately for better UX
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error("Failed to mark notification as read:", error);
+      // Reload on error
+      loadNotifications();
     }
   };
 
   const handleClearAll = async () => {
-    if (!user?.memberId) return;
+    if (!user?.id) return;
     try {
-      await apiService.clearAllNotifications(user.memberId);
+      await apiService.clearAllNotifications(user.id);
       loadNotifications();
     } catch (error) {
       console.error("Failed to clear notifications:", error);
@@ -96,6 +122,9 @@ const Header = () => {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/tasks")}>
               <span>Create Task</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/calendar")}>
+              <span>Add Event</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/health")}>
               <span>Log Health Data</span>
@@ -153,15 +182,25 @@ const Header = () => {
                   <DropdownMenuItem 
                     key={notification.id}
                     className="flex items-start gap-2 p-3 cursor-pointer"
-                    onClick={() => handleMarkAsRead(notification.id)}
+                    onClick={() => {
+                      handleMarkAsRead(notification.id);
+                      if (notification.actionUrl) {
+                        navigate(notification.actionUrl);
+                      }
+                    }}
                   >
                     <div className="flex-1">
-                      <p className="text-sm font-medium">{notification.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{notification.title}</p>
+                        {notification.type === 'reminder' && (
+                          <Bell className="h-3 w-3 text-orange-500" />
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {notification.message}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(notification.createdAt).toLocaleDateString()}
+                        {new Date(notification.createdAt).toLocaleString()}
                       </p>
                     </div>
                     {!notification.read && (

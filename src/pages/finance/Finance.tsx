@@ -19,6 +19,7 @@ const Finance = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<"expense" | "income">("expense");
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState({ name: "", icon: "💰", color: "#10b981", budget: "" });
   const [walletDialogOpen, setWalletDialogOpen] = useState(false);
@@ -87,13 +88,25 @@ const Finance = () => {
     }
   };
 
-  const openDialog = (type: "expense" | "income") => {
+  const openDialog = (type: "expense" | "income", transaction?: any) => {
     setDialogType(type);
-    setFormData(prev => ({ 
-      ...prev, 
-      categoryId: categories.length > 0 ? categories[0].id : "",
-      walletId: wallets.length > 0 ? wallets[0].id : ""
-    }));
+    setEditingTransaction(transaction);
+    
+    if (transaction) {
+      setFormData({
+        walletId: transaction.walletId,
+        categoryId: transaction.categoryId,
+        amount: transaction.amount.toString(),
+        description: transaction.description,
+        date: transaction.date.split('T')[0],
+      });
+    } else {
+      setFormData(prev => ({ 
+        ...prev, 
+        categoryId: categories.length > 0 ? categories[0].id : "",
+        walletId: wallets.length > 0 ? wallets[0].id : ""
+      }));
+    }
     setDialogOpen(true);
   };
 
@@ -126,16 +139,27 @@ const Finance = () => {
         createdBy: user?.memberId,
       };
 
-      // Await Firebase operations and only update UI after success
-      if (dialogType === "expense") {
-        await apiService.addExpense(data);
-        toast({ title: "Expense added" });
+      // Handle edit vs add
+      if (editingTransaction) {
+        if (dialogType === "expense") {
+          await apiService.updateExpense(editingTransaction.id, data);
+          toast({ title: "Expense updated" });
+        } else {
+          await apiService.updateIncome(editingTransaction.id, data);
+          toast({ title: "Income updated" });
+        }
       } else {
-        await apiService.addIncome(data);
-        toast({ title: "Income added" });
+        if (dialogType === "expense") {
+          await apiService.addExpense(data);
+          toast({ title: "Expense added" });
+        } else {
+          await apiService.addIncome(data);
+          toast({ title: "Income added" });
+        }
       }
 
       setDialogOpen(false);
+      setEditingTransaction(null);
       setFormData({
         walletId: wallets[0]?.id || "",
         categoryId: categories[0]?.id || "",
@@ -192,8 +216,14 @@ const Finance = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{dialogType === "expense" ? "Add Expense" : "Add Income"}</DialogTitle>
-            <DialogDescription>Record a new {dialogType}</DialogDescription>
+            <DialogTitle>
+              {editingTransaction 
+                ? `Edit ${dialogType === "expense" ? "Expense" : "Income"}` 
+                : `Add ${dialogType === "expense" ? "Expense" : "Income"}`}
+            </DialogTitle>
+            <DialogDescription>
+              {editingTransaction ? `Update this ${dialogType}` : `Record a new ${dialogType}`}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {wallets.length === 0 && (
@@ -255,8 +285,15 @@ const Finance = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd}>{dialogType === "expense" ? "Add Expense" : "Add Income"}</Button>
+            <Button variant="outline" onClick={() => {
+              setDialogOpen(false);
+              setEditingTransaction(null);
+            }}>Cancel</Button>
+            <Button onClick={handleAdd}>
+              {editingTransaction 
+                ? `Update ${dialogType === "expense" ? "Expense" : "Income"}` 
+                : `Add ${dialogType === "expense" ? "Expense" : "Income"}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -351,18 +388,21 @@ const Finance = () => {
                 toast({ title: "Name required", variant: "destructive" });
                 return;
               }
-              const newWallet = await apiService.addWallet({
-                familyId: user?.familyId,
-                name: walletForm.name,
-                balance: walletForm.balance ? parseFloat(walletForm.balance) : 0,
-                currency: "USD",
-                isShared: true
-              });
-              setWallets([...wallets, newWallet]);
-              setFormData({ ...formData, walletId: newWallet.id });
-              setWalletDialogOpen(false);
-              setWalletForm({ name: "", balance: "" });
-              toast({ title: "Wallet added" });
+              try {
+                await apiService.addWallet({
+                  familyId: user?.familyId,
+                  name: walletForm.name,
+                  balance: walletForm.balance ? parseFloat(walletForm.balance) : 0,
+                  currency: "INR",
+                  isShared: true
+                });
+                setWalletDialogOpen(false);
+                setWalletForm({ name: "", balance: "" });
+                toast({ title: "Wallet added" });
+                await loadFinanceData();
+              } catch (error: any) {
+                toast({ title: "Failed to add wallet", description: error.message, variant: "destructive" });
+              }
             }}>Add Wallet</Button>
           </DialogFooter>
         </DialogContent>
@@ -389,13 +429,18 @@ const Finance = () => {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => {
+                  onClick={async () => {
                     if (wallets.length === 1) {
                       toast({ title: "Cannot delete", description: "You need at least one wallet", variant: "destructive" });
                       return;
                     }
-                    setWallets(wallets.filter(w => w.id !== wallet.id));
-                    toast({ title: "Wallet deleted" });
+                    try {
+                      await apiService.deleteWallet(wallet.id);
+                      toast({ title: "Wallet deleted" });
+                      await loadFinanceData();
+                    } catch (error: any) {
+                      toast({ title: "Failed to delete wallet", description: error.message, variant: "destructive" });
+                    }
                   }}
                 >
                   🗑️
@@ -677,22 +722,36 @@ const Finance = () => {
                         <p className={`text-xl font-bold ${isIncome ? 'text-success' : 'text-destructive'}`}>
                           {isIncome ? '+' : '-'}₹{t.amount.toFixed(2)}
                         </p>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            if (isIncome) {
-                              apiService.deleteIncome(t.id);
-                            } else {
-                              apiService.deleteExpense(t.id);
-                            }
-                            toast({ title: "Transaction deleted" });
-                            loadFinanceData();
-                          }}
-                        >
-                          <span className="text-destructive">🗑️</span>
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => openDialog(isIncome ? 'income' : 'expense', t)}
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              try {
+                                if (isIncome) {
+                                  await apiService.deleteIncome(t.id);
+                                } else {
+                                  await apiService.deleteExpense(t.id);
+                                }
+                                toast({ title: "Transaction deleted" });
+                                await loadFinanceData();
+                              } catch (error: any) {
+                                toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <span className="text-destructive">🗑️</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -722,18 +781,32 @@ const Finance = () => {
                       </div>
                       <div className="flex items-center gap-3">
                         <p className="text-xl font-bold text-success">+₹{income.amount.toFixed(2)}</p>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            apiService.deleteIncome(income.id);
-                            toast({ title: "Income deleted" });
-                            loadFinanceData();
-                          }}
-                        >
-                          <span className="text-destructive">🗑️</span>
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => openDialog('income', income)}
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              try {
+                                await apiService.deleteIncome(income.id);
+                                toast({ title: "Income deleted" });
+                                await loadFinanceData();
+                              } catch (error: any) {
+                                toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <span className="text-destructive">🗑️</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -763,18 +836,32 @@ const Finance = () => {
                       </div>
                       <div className="flex items-center gap-3">
                         <p className="text-xl font-bold text-destructive">-₹{expense.amount.toFixed(2)}</p>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            apiService.deleteExpense(expense.id);
-                            toast({ title: "Expense deleted" });
-                            loadFinanceData();
-                          }}
-                        >
-                          <span className="text-destructive">🗑️</span>
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => openDialog('expense', expense)}
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              try {
+                                await apiService.deleteExpense(expense.id);
+                                toast({ title: "Expense deleted" });
+                                await loadFinanceData();
+                              } catch (error: any) {
+                                toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <span className="text-destructive">🗑️</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );

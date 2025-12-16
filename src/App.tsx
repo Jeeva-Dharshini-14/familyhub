@@ -30,6 +30,8 @@ import MainLayout from "./components/layout/MainLayout";
 
 // Auth
 import { authUtils } from "./lib/auth";
+import { notificationService } from "./lib/notificationService";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +41,22 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => {
+  useEffect(() => {
+    // Initialize notification service when app starts
+    const initNotifications = async () => {
+      if (authUtils.isAuthenticated()) {
+        await notificationService.requestPermission();
+        notificationService.start();
+      }
+    };
+    
+    initNotifications();
+    
+    // Cleanup on unmount
+    return () => {
+      notificationService.stop();
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

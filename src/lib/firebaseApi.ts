@@ -507,7 +507,33 @@ export const firebaseApi = {
     const notifications = await firebaseRequest('/notifications');
     if (!notifications) return [];
     
-    return Object.values(notifications).filter((n: any) => n.userId === userId);
+    return Object.values(notifications)
+      .filter((n: any) => n.userId === userId)
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  async markNotificationRead(notificationId: string) {
+    await firebaseRequest(`/notifications/${notificationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ read: true, readAt: new Date().toISOString() }),
+    });
+    return { success: true };
+  },
+
+  async clearAllNotifications(userId: string) {
+    const notifications = await this.getNotifications(userId);
+    const updates = {};
+    notifications.forEach((n: any) => {
+      updates[`/notifications/${n.id}`] = null;
+    });
+    
+    if (Object.keys(updates).length > 0) {
+      await firebaseRequest('', {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    }
+    return { success: true };
   },
 
   // Wishlist
@@ -577,16 +603,21 @@ export const firebaseApi = {
 
   async deleteExpense(expenseId: string) {
     await firebaseRequest(`/expenses/${expenseId}`, { method: 'DELETE' });
-    // Don't update wallet balance - calculate from transactions
+    return { success: true };
   },
 
   async deleteIncome(incomeId: string) {
     await firebaseRequest(`/incomes/${incomeId}`, { method: 'DELETE' });
-    // Don't update wallet balance - calculate from transactions
+    return { success: true };
   },
 
   async deleteMember(memberId: string) {
     await firebaseRequest(`/members/${memberId}`, { method: 'DELETE' });
+  },
+
+  async deleteWallet(walletId: string) {
+    await firebaseRequest(`/wallets/${walletId}`, { method: 'DELETE' });
+    return { success: true };
   },
 
   async updateAssignment(assignmentId: string, updates: any) {
@@ -779,7 +810,7 @@ export const firebaseApi = {
 
   // Notification system
   async createNotification(notificationData: any) {
-    const notificationId = `notification-${Date.now()}`;
+    const notificationId = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNotification = {
       id: notificationId,
       ...notificationData,
@@ -793,6 +824,59 @@ export const firebaseApi = {
     });
 
     return newNotification;
+  },
+
+  async updateExpense(expenseId: string, updates: any) {
+    const existingExpense = await firebaseRequest(`/expenses/${expenseId}`);
+    const updatedExpense = {
+      ...existingExpense,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await firebaseRequest(`/expenses/${expenseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updatedExpense),
+    });
+
+    return updatedExpense;
+  },
+
+  async updateIncome(incomeId: string, updates: any) {
+    const existingIncome = await firebaseRequest(`/incomes/${incomeId}`);
+    const updatedIncome = {
+      ...existingIncome,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await firebaseRequest(`/incomes/${incomeId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updatedIncome),
+    });
+
+    return updatedIncome;
+  },
+
+  async deleteCalendarEvent(eventId: string) {
+    await firebaseRequest(`/calendarEvents/${eventId}`, { method: 'DELETE' });
+    return { success: true };
+  },
+
+  async updateCalendarEvent(eventId: string, updates: any) {
+    const existingEvent = await firebaseRequest(`/calendarEvents/${eventId}`);
+    const updatedEvent = {
+      ...existingEvent,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await firebaseRequest(`/calendarEvents/${eventId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updatedEvent),
+    });
+
+    return updatedEvent;
   },
 
   async generateUpcomingNotifications(familyId: string) {
@@ -862,6 +946,41 @@ export const firebaseApi = {
     }
 
     return { taskNotifications: upcomingTasks.length, eventNotifications: upcomingEvents.length };
+  },
+
+  // Generate calendar event notifications
+  async generateEventNotifications(familyId: string) {
+    const now = new Date();
+    const events = await this.getCalendarEvents(familyId);
+    const users = await firebaseRequest('/users');
+    
+    if (!users) return;
+    
+    const familyUsers = Object.values(users).filter((u: any) => u.familyId === familyId);
+    
+    // Check for events starting in the next 30 minutes
+    const upcomingEvents = events.filter((event: any) => {
+      const eventStart = new Date(event.startDate);
+      const timeDiff = eventStart.getTime() - now.getTime();
+      const minutesUntil = Math.floor(timeDiff / (1000 * 60));
+      
+      return minutesUntil > 0 && minutesUntil <= (event.reminderMinutes || 30);
+    });
+    
+    for (const event of upcomingEvents) {
+      for (const user of familyUsers) {
+        await this.createNotification({
+          userId: (user as any).id,
+          title: `Event Starting Soon`,
+          message: `"${event.title}" starts in ${Math.floor((new Date(event.startDate).getTime() - now.getTime()) / (1000 * 60))} minutes`,
+          type: 'reminder',
+          actionUrl: '/calendar',
+          eventId: event.id
+        });
+      }
+    }
+    
+    return upcomingEvents.length;
   },
 
 };
