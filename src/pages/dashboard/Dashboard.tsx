@@ -20,6 +20,8 @@ const Dashboard = () => {
     expenseChange: 0,
   });
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [recentExpenses, setRecentExpenses] = useState<any[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -90,6 +92,10 @@ const Dashboard = () => {
         upcomingEvents: 5, // Mock
         expenseChange: -12, // Mock percentage
       });
+      
+      // Set recent expenses and upcoming tasks
+      setRecentExpenses(expenses.slice(0, 5));
+      setUpcomingTasks(tasks.filter((t: any) => t.status === "pending").slice(0, 5));
     } catch (error: any) {
       console.error("Failed to load dashboard:", error);
       // Show error message to user
@@ -307,9 +313,25 @@ const Dashboard = () => {
             <CardDescription>Last 5 transactions</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-muted-foreground text-center py-8">
-              No expenses yet. Add your first expense to get started!
-            </div>
+            {recentExpenses.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                No expenses yet. Add your first expense to get started!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentExpenses.map((expense) => (
+                  <div key={expense.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{expense.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(expense.date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <p className="text-sm font-medium text-destructive">-₹{expense.amount}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -319,9 +341,27 @@ const Dashboard = () => {
             <CardDescription>Tasks due soon</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-muted-foreground text-center py-8">
-              No pending tasks. Create a task to assign to family members!
-            </div>
+            {upcomingTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                No pending tasks. Create a task to assign to family members!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingTasks.map((task) => (
+                  <div key={task.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'}
+                      </p>
+                    </div>
+                    <div className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">
+                      {task.points || 0} pts
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -885,10 +885,11 @@ export const firebaseApi = {
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     // Get all family data
-    const [tasks, events, members] = await Promise.all([
+    const [tasks, events, members, existingNotifications] = await Promise.all([
       this.getTasks(familyId),
       this.getCalendarEvents(familyId),
-      this.getMembers(familyId)
+      this.getMembers(familyId),
+      firebaseRequest('/notifications')
     ]);
 
     // Check for upcoming tasks (due tomorrow)
@@ -905,42 +906,58 @@ export const firebaseApi = {
       return eventDate >= now && eventDate <= nextWeek;
     });
 
-    // Generate task notifications
+    // Generate task notifications (only if not already sent)
     for (const task of upcomingTasks) {
       const assignedMember = members.find((m: any) => m.id === task.assignedTo);
       if (assignedMember) {
-        // Find user for this member
         const users = await firebaseRequest('/users');
         const user = users ? Object.values(users).find((u: any) => u.memberId === assignedMember.id) : null;
         
         if (user) {
-          await this.createNotification({
-            userId: (user as any).id,
-            title: 'Task Due Tomorrow',
-            message: `Your task "${task.title}" is due tomorrow`,
-            type: 'warning',
-            actionUrl: '/tasks'
-          });
+          // Check if notification already exists
+          const notificationExists = existingNotifications && Object.values(existingNotifications).some((n: any) => 
+            n.userId === (user as any).id && 
+            n.message.includes(task.title) && 
+            n.type === 'warning'
+          );
+          
+          if (!notificationExists) {
+            await this.createNotification({
+              userId: (user as any).id,
+              title: 'Task Due Tomorrow',
+              message: `Your task "${task.title}" is due tomorrow`,
+              type: 'warning',
+              actionUrl: '/tasks'
+            });
+          }
         }
       }
     }
 
-    // Generate event notifications
+    // Generate event notifications (only if not already sent)
     for (const event of upcomingEvents) {
-      // Notify all family members about upcoming events
       const users = await firebaseRequest('/users');
       if (users) {
         const familyUsers = Object.values(users).filter((u: any) => u.familyId === familyId);
         
         for (const user of familyUsers) {
-          const daysUntil = Math.ceil((new Date(event.startDate).getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-          await this.createNotification({
-            userId: (user as any).id,
-            title: `Upcoming Event: ${event.title}`,
-            message: `${event.title} is in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`,
-            type: 'info',
-            actionUrl: '/calendar'
-          });
+          // Check if notification already exists
+          const notificationExists = existingNotifications && Object.values(existingNotifications).some((n: any) => 
+            n.userId === (user as any).id && 
+            n.message.includes(event.title) && 
+            n.type === 'info'
+          );
+          
+          if (!notificationExists) {
+            const daysUntil = Math.ceil((new Date(event.startDate).getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+            await this.createNotification({
+              userId: (user as any).id,
+              title: `Upcoming Event: ${event.title}`,
+              message: `${event.title} is in ${daysUntil} day${daysUntil > 1 ? 's' : ''}`,
+              type: 'info',
+              actionUrl: '/calendar'
+            });
+          }
         }
       }
     }

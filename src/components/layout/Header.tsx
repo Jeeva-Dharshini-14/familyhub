@@ -107,17 +107,7 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center gap-4 px-6">
-        {/* Desktop sidebar trigger */}
-        <div className="hidden md:block">
-          <SidebarTrigger />
-        </div>
-        
-        {/* Mobile sidebar trigger with hamburger icon */}
-        <div className="md:hidden">
-          <SidebarTrigger className="p-2">
-            <Menu className="h-5 w-5" />
-          </SidebarTrigger>
-        </div>
+        <SidebarTrigger />
 
         <div className="flex-1" />
 
