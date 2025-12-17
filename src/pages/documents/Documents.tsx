@@ -194,13 +194,13 @@ const Documents = () => {
 
   return (
     <>
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex items-center justify-between">
+      <div className="space-y-6 animate-in fade-in duration-500 pb-20 md:pb-6">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
             <p className="text-muted-foreground">Secure family document storage</p>
           </div>
-          <Button onClick={() => setUploadDialogOpen(true)}>
+          <Button onClick={() => setUploadDialogOpen(true)} className="hidden md:flex">
             <Upload className="mr-2 h-4 w-4" />
             Upload Document
           </Button>
@@ -321,6 +321,17 @@ const Documents = () => {
             )}
           </CardContent>
         </Card>
+      </div>
+      
+      {/* Mobile sticky action button */}
+      <div className="md:hidden fixed bottom-4 right-4 z-50">
+        <Button 
+          onClick={() => setUploadDialogOpen(true)}
+          size="lg"
+          className="rounded-full shadow-lg"
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
       </div>
 
       {/* Upload Dialog */}
